@@ -1,8 +1,8 @@
 {
   "name": "mju-news",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Myongji University public notice scraper CLI + Agent Skill",
+  "description": "명지대 공공 정보(공지/학식) Reader — mju-public-data-worker가 쓴 Postgres를 읽어 JSON으로 제공하는 CLI + Agent Skill",
   "type": "module",
   "bin": {
     "mju-news": "./dist/main.js"
@@ -19,14 +19,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "cheerio": "^1.1.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.1",
-    "got": "^14.6.6",
-    "iconv-lite": "^0.7.2"
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^2.1.0"

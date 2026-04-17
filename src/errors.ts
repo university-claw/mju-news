@@ -1,8 +1,8 @@
 /**
  * 커스텀 에러 계층.
  *
- * 각 에러는 `name`을 명시적으로 세팅해서 main.ts의 에러 envelope가
- * `err.name`을 type 필드로 그대로 내보낼 수 있게 한다.
+ * main.ts의 에러 envelope가 `err.name`을 type 필드로 내보낸다 —
+ * 각 클래스는 name을 명시적으로 세팅해야 한다.
  */
 
 export class MjuNewsError extends Error {
@@ -12,26 +12,24 @@ export class MjuNewsError extends Error {
   }
 }
 
-/** 스크래퍼 레벨 실패 (네트워크/파싱/구조 변경). */
-export class ScraperError extends MjuNewsError {
-  override readonly name = "ScraperError";
-  constructor(
-    public readonly sourceId: string,
-    message: string,
-    options?: ErrorOptions,
-  ) {
-    super(`[${sourceId}] ${message}`, options);
-  }
+/** DB 연결/쿼리 실패. */
+export class DbError extends MjuNewsError {
+  override readonly name = "DbError";
 }
 
-/** 저장소 파일 손상/권한 문제. */
-export class StoreError extends MjuNewsError {
-  override readonly name = "StoreError";
+/** 설정/환경변수 누락. */
+export class ConfigError extends MjuNewsError {
+  override readonly name = "ConfigError";
 }
 
-/** 잘못된 CLI 입력 (--since 포맷, 존재하지 않는 source 등). */
+/** 잘못된 CLI 입력. */
 export class InputError extends MjuNewsError {
   override readonly name = "InputError";
+}
+
+/** 요청한 리소스가 DB에 존재하지 않음. */
+export class NotFoundError extends MjuNewsError {
+  override readonly name = "NotFoundError";
 }
 
 /** SKILL.md frontmatter 검증 실패. */
