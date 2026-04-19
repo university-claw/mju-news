@@ -1,21 +1,15 @@
 import { Command, Option } from "commander";
 import type { GlobalOptions, OutputFormat } from "../types.js";
-import { sanitizeDataDir } from "../storage/paths.js";
 import { InputError } from "../errors.js";
 
 /**
- * 모든 서브커맨드가 공유하는 글로벌 옵션 등록.
+ * 모든 서브커맨드가 공유하는 글로벌 옵션.
  *
- * commander는 `inherited options`를 자동으로 자식에 내려주지 않기 때문에
- * 루트 Command에 `--data-dir`, `--format`, `-v`를 달고, 자식에서
- * `readGlobalOptions`로 병합 조회한다.
+ * v2.0.0 이후 `--data-dir`은 제거됨 (파일 저장소가 사라짐).
+ * DB 연결은 환경변수(`PGHOST`/`PGUSER`/...)로만 구성.
  */
 export function attachGlobalOptions(cmd: Command): Command {
   return cmd
-    .option(
-      "--data-dir <path>",
-      "notices.json 저장 위치 (기본: $MJU_NEWS_DATA_DIR 또는 ./data)",
-    )
     .addOption(
       new Option("--format <fmt>", "출력 형식")
         .choices(["json", "table"])
@@ -24,13 +18,8 @@ export function attachGlobalOptions(cmd: Command): Command {
     .option("-v, --verbose", "디버그 로그를 stderr로 출력", false);
 }
 
-/**
- * 서브커맨드 action에서 글로벌 옵션을 꺼내는 헬퍼.
- * commander v14에서는 `cmd.optsWithGlobals()`가 모든 조상의 옵션을 머지한다.
- */
 export function readGlobalOptions(cmd: Command): GlobalOptions {
   const opts = cmd.optsWithGlobals() as {
-    dataDir?: string;
     format?: OutputFormat;
     verbose?: boolean;
   };
@@ -39,19 +28,39 @@ export function readGlobalOptions(cmd: Command): GlobalOptions {
     throw new InputError(`invalid --format: ${format}`);
   }
   return {
-    dataDir: opts.dataDir ? sanitizeDataDir(opts.dataDir) : "",
     format,
     verbose: Boolean(opts.verbose),
   };
 }
 
-/** ISO 8601 timestamp 검증. 실패 시 InputError. */
+/** ISO 8601 timestamp 검증. */
 export function validateIsoTimestamp(input: string, optionName: string): string {
   const d = new Date(input);
   if (Number.isNaN(d.getTime())) {
-    throw new InputError(
-      `${optionName} must be ISO 8601 (got "${input}")`,
-    );
+    throw new InputError(`${optionName} must be ISO 8601 (got "${input}")`);
   }
   return d.toISOString();
+}
+
+/** YYYY-MM-DD 날짜 검증. */
+export function validateDate(input: string, optionName: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    throw new InputError(
+      `${optionName} must be YYYY-MM-DD (got "${input}")`,
+    );
+  }
+  const d = new Date(`${input}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new InputError(`${optionName} is not a real date ("${input}")`);
+  }
+  return input;
+}
+
+/** 양수 정수 검증. */
+export function parsePositiveInt(input: string, optionName: string): number {
+  const n = Number(input);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new InputError(`${optionName} must be a positive integer (got "${input}")`);
+  }
+  return n;
 }
