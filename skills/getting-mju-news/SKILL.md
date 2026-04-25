@@ -1,22 +1,32 @@
 ---
 name: getting-mju-news
-version: 2.0.0
-description: "명지대학교 공개 공지(일반/장학/행사/진로)와 학식 식단을 조회하는 skill. 유저가 '공지', '학교 새 소식', '장학금', '오늘 학식', '주간 식단' 등을 물을 때 사용. 로그인 불필요한 공개 정보만 다루며 개인 성적/출석/과제는 mju-shared(mju CLI)로 위임."
+version: 2.1.0
+description: "명지대학교 공지(일반/장학/행사/진로)와 학식 식단을 조회하는 skill. '공지', '학교 새 소식', '장학금', '오늘 학식', '주간 식단' 등을 물을 때 사용. 공개 정보지만 mjuclaw 정책상 온보딩 완료 유저만 호출 가능 — 호출 전 mju auth status로 인증 확인 필수. 미인증이면 mju-onboarding으로 위임."
 metadata:
   openclaw:
     category: "service"
     domain: "education"
     requires:
-      bins: ["mju-news"]
+      bins: ["mju-news", "mju"]
 ---
 
 # Getting MJU News
 
-명지대학교 **공개 정보(공지 + 학식)** 를 조회한다. 이 skill은 `mju-news` CLI를 통해 `mju-public-data-worker`가 수집·OCR·정규화해서 Postgres에 써둔 데이터를 **읽기만** 한다. 스크래핑은 이 skill이 하지 않는다.
+명지대학교 **공지 + 학식** 정보를 조회한다. 이 skill은 `mju-news` CLI를 통해 `mju-public-data-worker`가 수집·OCR·정규화해서 Postgres에 써둔 데이터를 **읽기만** 한다. 스크래핑은 이 skill이 하지 않는다.
+
+## 사전 조건: 온보딩 필수
+
+데이터 자체는 공개 정보지만, **mjuclaw 정책상 이 skill은 온보딩 완료 유저만 사용 가능**하다. 호출 전 항상 인증 상태를 먼저 확인:
+
+```bash
+mju auth status --app-dir /data/users/{DISCORD_USER_ID} --format json
+```
+
+`authenticated: false` 또는 에러면 `mju-onboarding` skill로 위임하고, 이 skill은 호출하지 않는다.
 
 ## 언제 사용
 
-다음 상황에서 호출:
+**(인증 확인 후)** 다음 상황에서 호출:
 - 유저가 "공지", "새 공지", "장학금 소식", "학사 일정", "취업 공고"를 물을 때 → `notices recent` / `notices search`
 - 특정 공지 상세가 필요하면 → `notices get <id>`
 - 유저가 "오늘 학식", "점심 뭐야", "내일 식단"을 물을 때 → `cafeterias today`
@@ -126,6 +136,7 @@ mju-news cafeterias week --start 2026-04-14 --format json
 
 ## 제약 사항
 
+- **온보딩 완료 유저 전용** — 미인증 유저 호출 금지 (위 "사전 조건" 참고). 이 skill은 데이터 자체는 공개여도 mjuclaw 접근 정책에 따라 인증 게이트를 따른다.
 - **공개 데이터만** — SSO 필요한 개인 데이터는 이 skill 범위 밖, `mju-shared` 사용
 - **실시간 아님** — worker scheduler가 15분 간격으로 돌기 때문에 방금 올라온 공지는 최대 15분 지연
 - **DB 장애** — `doctor` 명령으로 진단. `database.connected=false`면 worker·Postgres 상태를 확인
