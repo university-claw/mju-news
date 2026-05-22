@@ -5,6 +5,7 @@ import type {
   ListResult,
   NoticeDetail,
   NoticeSummary,
+  ShuttleLatestResult,
 } from "../types.js";
 
 /**
@@ -21,6 +22,8 @@ export function renderTable(data: unknown, kind?: string): string {
       return renderNoticeDetail(data as NoticeDetail);
     case "cafeterias":
       return renderCafeterias(data as ListResult<CafeteriaMenuEntry>);
+    case "shuttles":
+      return renderShuttles(data as ShuttleLatestResult);
     case "doctor":
       return renderDoctor(data as DoctorResult);
     case "skills":
@@ -105,6 +108,35 @@ function renderCafeterias(result: ListResult<CafeteriaMenuEntry>): string {
   return `${table.toString()}\ntotal: ${result.total}`;
 }
 
+function renderShuttles(result: ShuttleLatestResult): string {
+  if (!result.version) {
+    return "active 셔틀 시간표가 없습니다.\ntotal: 0";
+  }
+
+  const table = new Table({
+    head: ["day", "time", "campus", "route", "stop", "direction"],
+    colWidths: [10, 8, 8, 24, 20, 28],
+    wordWrap: true,
+  });
+  for (const item of result.items) {
+    table.push([
+      item.dayType,
+      item.departureTime,
+      item.campus ?? "",
+      truncate(item.routeName, 22),
+      truncate(item.stopName, 18),
+      item.direction ? truncate(item.direction, 26) : "",
+    ]);
+  }
+
+  return [
+    `${result.version.sourceTitle}`,
+    `version: ${result.version.id} normalized: ${result.version.normalizedAt ?? "none"}`,
+    table.toString(),
+    `total: ${result.total}`,
+  ].join("\n");
+}
+
 function renderDoctor(result: DoctorResult): string {
   const lines: string[] = [];
   lines.push(`node:       ${result.node.version}`);
@@ -118,6 +150,9 @@ function renderDoctor(result: DoctorResult): string {
   );
   lines.push(
     `  cafeteria_menu_entries: ${result.readModel.cafeteriaMenuEntries} (latest: ${result.readModel.cafeteriaMenuEntriesLatestDate ?? "none"})`,
+  );
+  lines.push(
+    `  shuttle_departures:      ${result.readModel.shuttleDepartures} (active: ${result.readModel.shuttleActiveVersion?.id ?? "none"})`,
   );
   lines.push("skills:");
   for (const sk of result.skills) {
