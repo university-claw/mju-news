@@ -5,7 +5,6 @@ export type TableKind =
   | "notices"
   | "notice-detail"
   | "cafeterias"
-  | "shuttles"
   | "doctor"
   | "skills";
 

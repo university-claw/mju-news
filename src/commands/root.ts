@@ -5,7 +5,6 @@ import { buildNoticesCommand } from "./notices.js";
 import { buildCafeteriasCommand } from "./cafeterias.js";
 import { buildDoctorCommand } from "./doctor.js";
 import { buildSkillsCommand } from "./skills.js";
-import { buildShuttlesCommand } from "./shuttles.js";
 
 export function buildRootCommand(): Command {
   const root = new Command(APP_NAME)
@@ -19,7 +18,6 @@ export function buildRootCommand(): Command {
   root
     .addCommand(buildNoticesCommand())
     .addCommand(buildCafeteriasCommand())
-    .addCommand(buildShuttlesCommand())
     .addCommand(buildDoctorCommand())
     .addCommand(buildSkillsCommand());
 

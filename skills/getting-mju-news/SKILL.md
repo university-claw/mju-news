@@ -1,7 +1,7 @@
 ---
 name: getting-mju-news
-version: 2.2.0
-description: "명지대학교 공지(일반/장학/행사/진로), 학식 식단, 셔틀 시간표를 조회하는 skill. '공지', '학교 새 소식', '장학금', '오늘 학식', '주간 식단', '셔틀' 등을 물을 때 사용. 공개 정보지만 mjuclaw 정책상 온보딩 완료 유저만 호출 가능 — 호출 전 mju auth status로 인증 확인 필수. 미인증이면 mju-onboarding으로 위임."
+version: 2.1.0
+description: "명지대학교 공지(일반/장학/행사/진로)와 학식 식단을 조회하는 skill. '공지', '학교 새 소식', '장학금', '오늘 학식', '주간 식단' 등을 물을 때 사용. 공개 정보지만 mjuclaw 정책상 온보딩 완료 유저만 호출 가능 — 호출 전 mju auth status로 인증 확인 필수. 미인증이면 mju-onboarding으로 위임."
 metadata:
   openclaw:
     category: "service"
@@ -12,7 +12,7 @@ metadata:
 
 # Getting MJU News
 
-명지대학교 **공지 + 학식 + 셔틀 시간표** 정보를 조회한다. 이 skill은 `mju-news` CLI를 통해 `mju-public-data-worker`가 수집·OCR·정규화해서 Postgres에 써둔 데이터를 **읽기만** 한다. 스크래핑은 이 skill이 하지 않는다.
+명지대학교 **공지 + 학식** 정보를 조회한다. 이 skill은 `mju-news` CLI를 통해 `mju-public-data-worker`가 수집·OCR·정규화해서 Postgres에 써둔 데이터를 **읽기만** 한다. 스크래핑은 이 skill이 하지 않는다.
 
 ## 사전 조건: 온보딩 필수
 
@@ -31,7 +31,6 @@ mju auth status --app-dir /data/users/{DISCORD_USER_ID} --format json
 - 특정 공지 상세가 필요하면 → `notices get <id>`
 - 유저가 "오늘 학식", "점심 뭐야", "내일 식단"을 물을 때 → `cafeterias today`
 - 주간 식단이 필요하면 → `cafeterias week --start <월요일>`
-- 유저가 "셔틀 시간표", "수업 끝나고 셔틀", "가까운 셔틀"을 물을 때 → `shuttles latest` / `shuttles next`
 
 다음은 다른 skill:
 - 개인 성적/출석/과제/시간표 → `mju-shared` (mju CLI)
@@ -77,12 +76,6 @@ mju-news cafeterias today --date 2026-04-18 --format json
 
 # 주간 학식
 mju-news cafeterias week --start 2026-04-14 --format json
-
-# active 셔틀 시간표 전체
-mju-news shuttles latest --format json
-
-# 특정 날짜/시각 이후 가까운 셔틀 후보
-mju-news shuttles next --date 2026-05-22 --after 18:00 --limit 3 --format json
 ```
 
 ## 응답 스키마 요약
@@ -126,32 +119,6 @@ mju-news shuttles next --date 2026-05-22 --after 18:00 --limit 3 --format json
       "isClosed": false,
       "menuText": "…",
       "menuItems": []
-    }
-  ]
-}
-```
-
-**셔틀 (`shuttles latest` / `shuttles next`)**
-```json
-{
-  "serviceDate": "2026-05-22",
-  "after": "18:00",
-  "limit": 3,
-  "version": {
-    "id": 1,
-    "sourceTitle": "2026학년도 1학기 통학·셔틀버스 운행 안내",
-    "sourceUrl": "https://www.mju.ac.kr/..."
-  },
-  "total": 1,
-  "items": [
-    {
-      "campus": "자연",
-      "routeName": "명지대역 노선",
-      "direction": "명지대역 -> 자연캠퍼스",
-      "stopName": "명지대역",
-      "dayType": "weekday",
-      "departureTime": "18:10",
-      "note": null
     }
   ]
 }

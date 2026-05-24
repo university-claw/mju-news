@@ -8,12 +8,6 @@
 export type NoticeCategory = "general" | "scholarship" | "event" | "career";
 export type CafeteriaId = "student-hall" | "myeongjin" | "bokji" | "bangmok";
 export type MealType = "breakfast" | "lunch" | "dinner";
-export type ShuttleDayType =
-  | "weekday"
-  | "saturday"
-  | "sunday"
-  | "holiday"
-  | "daily";
 
 /** 공지 요약 행 (list/search 결과). */
 export interface NoticeSummary {
@@ -81,47 +75,6 @@ export interface CafeteriaMenuEntry {
   confidence: number | null;
 }
 
-export interface ShuttleTimetableVersion {
-  id: number;
-  sourceId: string;
-  sourceExternalId: string;
-  sourceTitle: string;
-  sourceUrl: string;
-  sourcePublishedAt: string | null;
-  academicYear: number | null;
-  termLabel: string | null;
-  isActive: boolean;
-  normalizationStatus: "succeeded" | "failed";
-  normalizationErrorMessage: string | null;
-  departureCount: number;
-  normalizedAt: string | null;
-}
-
-export interface ShuttleDeparture {
-  id: number;
-  timetableVersionId: number;
-  campus: string | null;
-  routeName: string;
-  direction: string | null;
-  stopName: string;
-  dayType: ShuttleDayType;
-  departureTime: string;
-  note: string | null;
-  sortOrder: number;
-}
-
-export interface ShuttleLatestResult {
-  version: ShuttleTimetableVersion | null;
-  total: number;
-  items: ShuttleDeparture[];
-}
-
-export interface ShuttleNextResult extends ShuttleLatestResult {
-  serviceDate: string;
-  after: string;
-  limit: number;
-}
-
 /** 목록 응답 wrapper. */
 export interface ListResult<T> {
   total: number;
@@ -145,13 +98,6 @@ export interface DoctorResult {
     noticeItemsLatestAt: string | null;
     cafeteriaMenuEntries: number;
     cafeteriaMenuEntriesLatestDate: string | null;
-    shuttleDepartures: number;
-    shuttleActiveVersion: {
-      id: number;
-      title: string;
-      normalizedAt: string | null;
-      departureCount: number;
-    } | null;
   };
   skills: Array<{ name: string; valid: boolean; error?: string }>;
 }

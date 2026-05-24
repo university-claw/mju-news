@@ -38,8 +38,6 @@ export function buildDoctorCommand(): Command {
           noticeItemsLatestAt: null,
           cafeteriaMenuEntries: 0,
           cafeteriaMenuEntriesLatestDate: null,
-          shuttleDepartures: 0,
-          shuttleActiveVersion: null,
         },
         skills: [],
       };
