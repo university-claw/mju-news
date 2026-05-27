@@ -8,6 +8,10 @@
 export type NoticeCategory = "general" | "scholarship" | "event" | "career";
 export type CafeteriaId = "student-hall" | "myeongjin" | "bokji" | "bangmok";
 export type MealType = "breakfast" | "lunch" | "dinner";
+export type CourseCatalogMeetingParseStatus =
+  | "parsed"
+  | "partial"
+  | "unparsed";
 
 /** 공지 요약 행 (list/search 결과). */
 export interface NoticeSummary {
@@ -75,10 +79,82 @@ export interface CafeteriaMenuEntry {
   confidence: number | null;
 }
 
+export interface CourseCatalogMeeting {
+  rawTimeRange: string;
+  dayOfWeek: number | null;
+  dayLabel: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  location: string | null;
+  parseStatus: CourseCatalogMeetingParseStatus;
+  warning: string | null;
+}
+
+export interface CourseCatalogEntry {
+  year: number;
+  termCode: string;
+  termLabel: string;
+  category: string;
+  categoryLabel: string;
+  courseCode: string | null;
+  curriculumNumber: string | null;
+  courseTitle: string;
+  gradeLevel: string | null;
+  section: string | null;
+  professor: string | null;
+  credit: number | null;
+  department: string | null;
+  campus: string | null;
+  meetings: CourseCatalogMeeting[];
+}
+
+export type GraduationRequirementRuleStatus = "confirmed" | "unprovided";
+
+export interface GraduationRequirementCourseGroup {
+  groupKey: string | null;
+  label: string;
+  requiredCredits: number | null;
+  minCourses: number | null;
+  requiredCourseCodes: string[];
+  requiredCourseTitles: string[];
+  groupType: string | null;
+  alternativeGroup: string | null;
+  appliesTo?: Record<string, unknown>;
+  note: string | null;
+}
+
+export interface GraduationRequirementRule {
+  requirementKey: string;
+  label: string;
+  category: string;
+  requiredCredits: number | null;
+  requiredCourseCodes: string[];
+  requiredCourseTitles: string[];
+  courseGroups: GraduationRequirementCourseGroup[];
+  programTrack: string | null;
+  minCourses: number | null;
+  appliesTo: Record<string, unknown>;
+  status: GraduationRequirementRuleStatus;
+  note: string | null;
+}
+
+export interface GraduationRequirementSource {
+  id: number;
+  department: string;
+  admissionYear: number;
+  sourceKind: string;
+  sourceTitle: string;
+  sourceUrl: string;
+  sourcePublishedAt: string | null;
+  sourceRetrievedAt: string;
+  rules: GraduationRequirementRule[];
+}
+
 /** 목록 응답 wrapper. */
 export interface ListResult<T> {
   total: number;
   items: T[];
+  query?: Record<string, unknown>;
 }
 
 /** doctor 응답. */

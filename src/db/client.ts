@@ -72,8 +72,8 @@ export function getPool(): pg.Pool {
 }
 
 export async function closePool(): Promise<void> {
-  if (cachedPool) {
-    await cachedPool.end();
-    cachedPool = null;
-  }
+  const pool = cachedPool;
+  if (!pool) return;
+  cachedPool = null;
+  await pool.end();
 }

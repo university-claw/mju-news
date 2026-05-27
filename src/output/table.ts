@@ -1,7 +1,9 @@
 import Table from "cli-table3";
 import type {
   CafeteriaMenuEntry,
+  CourseCatalogEntry,
   DoctorResult,
+  GraduationRequirementSource,
   ListResult,
   NoticeDetail,
   NoticeSummary,
@@ -21,6 +23,12 @@ export function renderTable(data: unknown, kind?: string): string {
       return renderNoticeDetail(data as NoticeDetail);
     case "cafeterias":
       return renderCafeterias(data as ListResult<CafeteriaMenuEntry>);
+    case "course-catalog":
+      return renderCourseCatalog(data as ListResult<CourseCatalogEntry>);
+    case "graduation-requirements":
+      return renderGraduationRequirements(data as ListResult<GraduationRequirementSource>);
+    case "academic-planning":
+      return JSON.stringify(data, null, 2);
     case "doctor":
       return renderDoctor(data as DoctorResult);
     case "skills":
@@ -28,6 +36,47 @@ export function renderTable(data: unknown, kind?: string): string {
     default:
       return JSON.stringify(data, null, 2);
   }
+}
+
+function renderGraduationRequirements(
+  result: ListResult<GraduationRequirementSource>,
+): string {
+  const table = new Table({
+    head: ["department", "year", "source", "rules"],
+    colWidths: [18, 8, 34, 12],
+    wordWrap: true,
+  });
+  for (const source of result.items) {
+    table.push([
+      source.department,
+      source.admissionYear,
+      truncate(source.sourceTitle, 32),
+      source.rules.length,
+    ]);
+  }
+  return `${table.toString()}\ntotal: ${result.total}`;
+}
+
+function renderCourseCatalog(result: ListResult<CourseCatalogEntry>): string {
+  const table = new Table({
+    head: ["category", "code", "title", "section", "professor", "meetings"],
+    colWidths: [16, 14, 34, 10, 16, 28],
+    wordWrap: true,
+  });
+  for (const entry of result.items) {
+    table.push([
+      entry.category,
+      entry.courseCode ?? entry.curriculumNumber ?? "",
+      truncate(entry.courseTitle, 32),
+      entry.section ?? "",
+      entry.professor ?? "",
+      truncate(
+        entry.meetings.map((m) => m.rawTimeRange).filter(Boolean).join(", "),
+        26,
+      ),
+    ]);
+  }
+  return `${table.toString()}\ntotal: ${result.total}`;
 }
 
 function renderNotices(result: ListResult<NoticeSummary>): string {
