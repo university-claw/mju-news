@@ -1,9 +1,12 @@
 import { Command } from "commander";
 import { APP_DESCRIPTION, APP_NAME, APP_VERSION } from "../app-meta.js";
 import { attachGlobalOptions } from "./common.js";
+import { buildAcademicPlanningCommand } from "./academic-planning.js";
 import { buildNoticesCommand } from "./notices.js";
 import { buildCafeteriasCommand } from "./cafeterias.js";
+import { buildCourseCatalogCommand } from "./course-catalog.js";
 import { buildDoctorCommand } from "./doctor.js";
+import { buildGraduationRequirementsCommand } from "./graduation-requirements.js";
 import { buildSkillsCommand } from "./skills.js";
 
 export function buildRootCommand(): Command {
@@ -18,6 +21,9 @@ export function buildRootCommand(): Command {
   root
     .addCommand(buildNoticesCommand())
     .addCommand(buildCafeteriasCommand())
+    .addCommand(buildCourseCatalogCommand())
+    .addCommand(buildGraduationRequirementsCommand())
+    .addCommand(buildAcademicPlanningCommand())
     .addCommand(buildDoctorCommand())
     .addCommand(buildSkillsCommand());
 

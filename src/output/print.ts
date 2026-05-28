@@ -5,6 +5,9 @@ export type TableKind =
   | "notices"
   | "notice-detail"
   | "cafeterias"
+  | "course-catalog"
+  | "graduation-requirements"
+  | "academic-planning"
   | "doctor"
   | "skills";
 
