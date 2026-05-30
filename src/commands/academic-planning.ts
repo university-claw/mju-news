@@ -58,6 +58,14 @@ export interface AcademicOfficialCoverage {
   reason?: string;
 }
 
+export interface AcademicPlanningDataReadiness {
+  target: "course-catalog" | "graduation-requirements";
+  status: "ready" | "empty";
+  count: number;
+  scope: Record<string, unknown>;
+  message?: string;
+}
+
 export interface AcademicCompletedCourse {
   courseTitle: string;
   courseCode?: string;
@@ -77,6 +85,7 @@ export type AcademicTimetablePlanningResult = ListResult<CourseCatalogEntry> & {
   timetableSelectedChoiceKeys: AcademicRequirementChoiceSelections;
   completedCourses: AcademicCompletedCourse[];
   currentCourses: AcademicCompletedCourse[];
+  dataReadiness: AcademicPlanningDataReadiness[];
   officialRequirementCoverage: AcademicOfficialCoverage;
   officialCoverage: AcademicOfficialCoverage;
   automaticPlanningApplied: boolean;
@@ -94,6 +103,7 @@ export type AcademicGraduationRoadmapResult = Record<string, unknown> & {
   graduationSelectedChoiceKeys: AcademicRequirementChoiceSelections;
   completedCourses: AcademicCompletedCourse[];
   currentCourses: AcademicCompletedCourse[];
+  dataReadiness: AcademicPlanningDataReadiness[];
   officialRequirementCoverage: AcademicOfficialCoverage;
   officialCoverage: AcademicOfficialCoverage;
   automaticPlanningApplied: boolean;
@@ -155,11 +165,19 @@ async function readJson(pathname: string | undefined): Promise<unknown> {
 function directCourseArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   const record = recordFrom(value);
-  for (const key of ["completedCourses", "completedCourseTitles", "takenCourses", "items", "courses"]) {
+  for (const key of ["completedCourses", "completedCourseTitles", "takenCourses", "items", "courses", "allRows"]) {
     const items = record[key];
     if (Array.isArray(items)) return items;
   }
   return [];
+}
+
+function academicTermLabelFromRecord(record: Record<string, unknown>, fallback?: string): string {
+  const termLabel = stringValue(record.termLabel ?? record.term ?? record.label ?? fallback);
+  const year = numberValue(record.year ?? record.termYear ?? record.academicYear);
+  if (!termLabel) return year != null ? String(year) : "";
+  if (year == null || termLabel.includes(String(year))) return termLabel;
+  return `${year} ${termLabel}`;
 }
 
 function normalizeCourseRow(value: unknown, termLabel?: string): AcademicCompletedCourse | undefined {
@@ -170,13 +188,14 @@ function normalizeCourseRow(value: unknown, termLabel?: string): AcademicComplet
   const record = recordFrom(value);
   const courseTitle = stringValue(record.courseTitle ?? record.title ?? record.subjectName ?? record.subject_name ?? record.name);
   const courseCode = stringValue(record.courseCode ?? record.code ?? record.curiNum ?? record.curriculumNumber);
+  const resolvedTermLabel = academicTermLabelFromRecord(record, termLabel);
   if (!courseTitle && !courseCode) return undefined;
   return {
     courseTitle: courseTitle || courseCode,
     ...(courseCode ? { courseCode } : {}),
     ...(numberValue(record.credits ?? record.credit) != null ? { credits: numberValue(record.credits ?? record.credit) } : {}),
     ...(stringValue(record.category ?? record.categoryLabel) ? { category: stringValue(record.category ?? record.categoryLabel) } : {}),
-    ...(stringValue(record.termLabel ?? record.term ?? termLabel) ? { termLabel: stringValue(record.termLabel ?? record.term ?? termLabel) } : {}),
+    ...(resolvedTermLabel ? { termLabel: resolvedTermLabel } : {}),
     ...(stringValue(record.grade) ? { grade: stringValue(record.grade) } : {}),
   };
 }
@@ -192,7 +211,7 @@ export function normalizeCompletedCoursesFromMsi(value: unknown): AcademicComple
   if (Array.isArray(record.termRecords)) {
     for (const term of record.termRecords) {
       const termRecord = recordFrom(term);
-      const termLabel = stringValue(termRecord.termLabel ?? termRecord.term ?? termRecord.label);
+      const termLabel = academicTermLabelFromRecord(termRecord);
       for (const course of directCourseArray(termRecord)) push(course, termLabel);
     }
   }
@@ -459,7 +478,11 @@ export function buildRequirementChoiceGroupsFromSources(
 }
 
 function requirementChoiceMatchKey(value: string): string {
-  return value.replace(/\s+/gu, "").trim().toLowerCase();
+  return value
+    .normalize("NFKC")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "")
+    .trim()
+    .toLowerCase();
 }
 
 function inferRequirementChoiceSelections(
@@ -503,6 +526,46 @@ function officialCoverage(
   };
 }
 
+function readinessCheck(args: {
+  target: AcademicPlanningDataReadiness["target"];
+  count: number;
+  scope: Record<string, unknown>;
+}): AcademicPlanningDataReadiness {
+  if (args.count > 0) {
+    return {
+      target: args.target,
+      status: "ready",
+      count: args.count,
+      scope: args.scope,
+    };
+  }
+
+  const message = args.target === "course-catalog"
+    ? "No course catalog rows matched the requested year, term, and department. Verify public-data course catalog import."
+    : "No graduation requirement rows matched the requested department and admission year. Verify public-data graduation requirement import.";
+  return {
+    target: args.target,
+    status: "empty",
+    count: 0,
+    scope: args.scope,
+    message,
+  };
+}
+
+function academicPlanningDbError(target: AcademicPlanningDataReadiness["target"], error: unknown): Error {
+  const record = recordFrom(error);
+  const code = stringValue(record.code);
+  const relation = stringValue(record.relation);
+  const originalMessage = error instanceof Error ? error.message : stringValue(error);
+  const tableHint = relation ? ` relation=${relation}` : "";
+  const reason = code === "42P01"
+    ? "required public-data table is missing; run migrations before academic planning reads"
+    : "public-data DB read failed";
+  return new Error(
+    `academic-planning ${target} preflight failed: ${reason}${tableHint}${code ? ` code=${code}` : ""}${originalMessage ? ` message=${originalMessage}` : ""}`,
+  );
+}
+
 function requirementListQuery(query: AcademicRequirementQuery) {
   return {
     department: query.department,
@@ -527,6 +590,8 @@ async function loadRequirementSources(
   const pool = getPool();
   try {
     return await listGraduationRequirementSources(pool, requirementListQuery(query));
+  } catch (error) {
+    throw academicPlanningDbError("graduation-requirements", error);
   } finally {
     await closePool();
   }
@@ -550,6 +615,8 @@ async function loadCourseCatalogEntries(args: {
   const pool = getPool();
   try {
     return await listCourseCatalogEntries(pool, query);
+  } catch (error) {
+    throw academicPlanningDbError("course-catalog", error);
   } finally {
     await closePool();
   }
@@ -663,6 +730,18 @@ export async function buildAcademicPlanningTimetableResult(args: {
     ...personal.completedCourses,
     ...personal.currentCourses,
   ]);
+  const dataReadiness = [
+    readinessCheck({
+      target: "course-catalog",
+      count: items.length,
+      scope: { year: args.year, termCode: args.termCode, department: args.department },
+    }),
+    readinessCheck({
+      target: "graduation-requirements",
+      count: requirementSources.length,
+      scope: { department: args.department, admissionYear: args.admissionYear },
+    }),
+  ];
 
   return {
     ...base,
@@ -685,6 +764,7 @@ export async function buildAcademicPlanningTimetableResult(args: {
     timetableSelectedChoiceKeys: selectedChoiceKeys,
     completedCourses: personal.completedCourses,
     currentCourses: personal.currentCourses,
+    dataReadiness,
     officialRequirementCoverage: coverage,
     officialCoverage: coverage,
     automaticPlanningApplied: coverage.status === "confirmed",
@@ -731,6 +811,13 @@ export async function buildAcademicPlanningGraduationRoadmapResult(args: {
     ...personal.completedCourses,
     ...personal.currentCourses,
   ]);
+  const dataReadiness = [
+    readinessCheck({
+      target: "graduation-requirements",
+      count: requirementSources.length,
+      scope: { department: args.department, admissionYear: args.admissionYear },
+    }),
+  ];
 
   return {
     ...(personal.msiGraduation ?? {}),
@@ -745,6 +832,7 @@ export async function buildAcademicPlanningGraduationRoadmapResult(args: {
     graduationSelectedChoiceKeys: selectedChoiceKeys,
     completedCourses: personal.completedCourses,
     currentCourses: personal.currentCourses,
+    dataReadiness,
     officialRequirementCoverage: coverage,
     officialCoverage: coverage,
     automaticPlanningApplied: coverage.status === "confirmed",
