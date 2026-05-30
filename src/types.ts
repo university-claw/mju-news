@@ -191,6 +191,12 @@ export interface CourseCatalogPayloadDiagnostics {
     courseCatalogScope?: CourseCatalogDiagnostics["scope"];
     courseCatalogStageCount?: number;
   };
+  runtime: {
+    appName: string;
+    appVersion: string;
+    nodeVersion: string;
+    pid: number;
+  };
   hints: string[];
 }
 

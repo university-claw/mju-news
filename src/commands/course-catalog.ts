@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
+import { APP_NAME, APP_VERSION } from "../app-meta.js";
 import { closePool, getPool } from "../db/client.js";
 import {
   listCourseCatalogDiagnostics,
@@ -153,6 +154,12 @@ export function buildCourseCatalogPayloadDiagnostics(args: {
       ...(args.diagnostics ? { courseCatalog: args.diagnostics.source } : {}),
       ...(args.diagnostics ? { courseCatalogScope: args.diagnostics.scope } : {}),
       ...(args.diagnostics ? { courseCatalogStageCount: args.diagnostics.stages.length } : {}),
+    },
+    runtime: {
+      appName: APP_NAME,
+      appVersion: APP_VERSION,
+      nodeVersion: process.version,
+      pid: process.pid,
     },
     hints,
   };
