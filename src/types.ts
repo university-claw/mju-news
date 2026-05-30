@@ -121,6 +121,17 @@ export interface CourseCatalogDiagnosticStage {
   message?: string;
 }
 
+export interface CourseCatalogDiagnosticSample {
+  courseTitle: string;
+  courseCode?: string;
+  category?: string;
+  categoryLabel?: string;
+  department?: string;
+  gradeLevel?: string;
+  section?: string;
+  professor?: string;
+}
+
 export interface CourseCatalogDiagnostics {
   generatedAt: string;
   scope: {
@@ -142,11 +153,45 @@ export interface CourseCatalogDiagnostics {
     departmentMatched: CourseCatalogDiagnosticBucket[];
     readerOutput: CourseCatalogDiagnosticBucket[];
   };
+  samples?: {
+    allTerm: CourseCatalogDiagnosticSample[];
+    departmentMatched: CourseCatalogDiagnosticSample[];
+    readerOutput: CourseCatalogDiagnosticSample[];
+  };
   hints: string[];
   error?: {
     stage: string;
     message: string;
   };
+}
+
+export interface CourseCatalogPayloadDiagnostics {
+  diagnosticVersion: number;
+  generatedAt: string;
+  producer:
+    | "course-catalog.list"
+    | "academic-planning.timetable"
+    | "academic-planning.graduation-roadmap";
+  query: Record<string, unknown>;
+  output: {
+    total?: number;
+    itemCount?: number;
+    requirementSourceCount?: number;
+    completedCourseCount?: number;
+    currentCourseCount?: number;
+    choiceGroupCount?: number;
+    dataReadinessCount?: number;
+    hasCourseCatalogDiagnostics?: boolean;
+    hasDataReadiness?: boolean;
+    automaticPlanningApplied?: boolean;
+    officialCoverageStatus?: string;
+  };
+  source: {
+    courseCatalog?: CourseCatalogDiagnostics["source"];
+    courseCatalogScope?: CourseCatalogDiagnostics["scope"];
+    courseCatalogStageCount?: number;
+  };
+  hints: string[];
 }
 
 export type GraduationRequirementRuleStatus = "confirmed" | "unprovided";

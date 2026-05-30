@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type {
   CourseCatalogDiagnosticBucket,
+  CourseCatalogDiagnosticSample,
   CourseCatalogDiagnostics,
   CourseCatalogEntry,
   CourseCatalogMeeting,
@@ -134,6 +135,28 @@ function countBucketFromEntries(
     .map(([key, count]) => ({ key, count }));
 }
 
+function diagnosticSampleFromEntry(
+  entry: CourseCatalogEntry,
+): CourseCatalogDiagnosticSample {
+  return {
+    courseTitle: entry.courseTitle,
+    ...(entry.courseCode ? { courseCode: entry.courseCode } : {}),
+    ...(entry.category ? { category: entry.category } : {}),
+    ...(entry.categoryLabel ? { categoryLabel: entry.categoryLabel } : {}),
+    ...(entry.department ? { department: entry.department } : {}),
+    ...(entry.gradeLevel ? { gradeLevel: entry.gradeLevel } : {}),
+    ...(entry.section ? { section: entry.section } : {}),
+    ...(entry.professor ? { professor: entry.professor } : {}),
+  };
+}
+
+function diagnosticSamplesFromEntries(
+  items: CourseCatalogEntry[],
+  limit = 8,
+): CourseCatalogDiagnosticSample[] {
+  return items.slice(0, limit).map(diagnosticSampleFromEntry);
+}
+
 async function countRows(
   pool: Pool,
   where: string[],
@@ -167,6 +190,48 @@ async function countBuckets(
   return res.rows.map((row) => ({
     key: String(row.key ?? "(empty)"),
     count: Number(row.count ?? 0),
+  }));
+}
+
+async function sampleRows(
+  pool: Pool,
+  where: string[],
+  params: unknown[],
+  limit = 8,
+): Promise<CourseCatalogDiagnosticSample[]> {
+  const queryParams = [...params, limit];
+  const limitParam = queryParams.length;
+  const res = await pool.query(
+    `
+      SELECT
+        e.course_title,
+        e.course_code,
+        e.category,
+        e.category_label,
+        e.department,
+        e.grade_level,
+        e.section,
+        e.professor
+      FROM course_catalog_entries e
+      WHERE ${where.join(" AND ")}
+      ORDER BY
+        CASE WHEN e.category = 'major' THEN 0 ELSE 1 END,
+        e.course_title ASC,
+        e.course_code ASC NULLS LAST,
+        e.section ASC NULLS LAST
+      LIMIT $${limitParam}
+    `,
+    queryParams,
+  );
+  return res.rows.map((row) => ({
+    courseTitle: String(row.course_title ?? ""),
+    ...(row.course_code ? { courseCode: String(row.course_code) } : {}),
+    ...(row.category ? { category: String(row.category) } : {}),
+    ...(row.category_label ? { categoryLabel: String(row.category_label) } : {}),
+    ...(row.department ? { department: String(row.department) } : {}),
+    ...(row.grade_level ? { gradeLevel: String(row.grade_level) } : {}),
+    ...(row.section ? { section: String(row.section) } : {}),
+    ...(row.professor ? { professor: String(row.professor) } : {}),
   }));
 }
 
@@ -227,6 +292,8 @@ export async function listCourseCatalogDiagnostics(
     departmentMatchedCategoryCounts,
     allTermDepartmentCounts,
     departmentMatchedDepartmentCounts,
+    allTermSamples,
+    departmentMatchedSamples,
   ] = await Promise.all([
     countRows(pool, allTerm.where, allTerm.params),
     countRows(pool, departmentMatched.where, departmentMatched.params),
@@ -234,6 +301,8 @@ export async function listCourseCatalogDiagnostics(
     countBuckets(pool, departmentMatched.where, departmentMatched.params, "category", 20),
     countBuckets(pool, allTerm.where, allTerm.params, "department", 12),
     countBuckets(pool, departmentMatched.where, departmentMatched.params, "department", 12),
+    sampleRows(pool, allTerm.where, allTerm.params),
+    sampleRows(pool, departmentMatched.where, departmentMatched.params),
   ]);
 
   return {
@@ -260,6 +329,11 @@ export async function listCourseCatalogDiagnostics(
       allTerm: allTermDepartmentCounts,
       departmentMatched: departmentMatchedDepartmentCounts,
       readerOutput: countBucketFromEntries(outputItems, "department"),
+    },
+    samples: {
+      allTerm: allTermSamples,
+      departmentMatched: departmentMatchedSamples,
+      readerOutput: diagnosticSamplesFromEntries(outputItems),
     },
     hints: courseCatalogDiagnosticHints({
       allTermCount,

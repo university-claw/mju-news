@@ -37,7 +37,7 @@ describe("course-catalog command validation", () => {
       department: "15611",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       total: 0,
       items: [],
       query: {
@@ -45,6 +45,14 @@ describe("course-catalog command validation", () => {
         termCode: "10",
         category: "major",
         department: "15611",
+      },
+      payloadDiagnostics: {
+        diagnosticVersion: 2,
+        producer: "course-catalog.list",
+        output: {
+          itemCount: 0,
+          hasCourseCatalogDiagnostics: false,
+        },
       },
     });
   });
@@ -223,6 +231,10 @@ describe("course-catalog command validation", () => {
       { key: "unknown", count: 1 },
     ]);
     expect(diagnostics.departmentCandidates).toEqual(["15611"]);
+    expect(diagnostics.samples?.readerOutput.map((item) => item.courseTitle)).toEqual([
+      "Major Course",
+      "Unknown Course",
+    ]);
   });
 
   it("attaches the course-catalog group to the root command", () => {

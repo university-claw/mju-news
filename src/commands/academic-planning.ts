@@ -9,6 +9,7 @@ import { listGraduationRequirementSources } from "../db/graduation-requirements.
 import { printData } from "../output/print.js";
 import type {
   CourseCatalogDiagnostics,
+  CourseCatalogPayloadDiagnostics,
   CourseCatalogEntry,
   GraduationRequirementCourseGroup,
   GraduationRequirementSource,
@@ -18,6 +19,7 @@ import { readGlobalOptions } from "./common.js";
 import {
   buildCourseCatalogDiagnosticsFromExport,
   buildCourseCatalogListResult,
+  buildCourseCatalogPayloadDiagnostics,
   listCourseCatalogEntriesFromExport,
   parseCatalogYear,
   resolveCatalogJsonPath,
@@ -91,6 +93,7 @@ export type AcademicTimetablePlanningResult = ListResult<CourseCatalogEntry> & {
   completedCourses: AcademicCompletedCourse[];
   currentCourses: AcademicCompletedCourse[];
   courseCatalogDiagnostics: CourseCatalogDiagnostics;
+  payloadDiagnostics: CourseCatalogPayloadDiagnostics;
   dataReadiness: AcademicPlanningDataReadiness[];
   officialRequirementCoverage: AcademicOfficialCoverage;
   officialCoverage: AcademicOfficialCoverage;
@@ -109,6 +112,7 @@ export type AcademicGraduationRoadmapResult = Record<string, unknown> & {
   graduationSelectedChoiceKeys: AcademicRequirementChoiceSelections;
   completedCourses: AcademicCompletedCourse[];
   currentCourses: AcademicCompletedCourse[];
+  payloadDiagnostics: CourseCatalogPayloadDiagnostics;
   dataReadiness: AcademicPlanningDataReadiness[];
   officialRequirementCoverage: AcademicOfficialCoverage;
   officialCoverage: AcademicOfficialCoverage;
@@ -641,6 +645,11 @@ function courseCatalogDiagnosticsFallback(
       departmentMatched: [],
       readerOutput: [],
     },
+    samples: {
+      allTerm: [],
+      departmentMatched: [],
+      readerOutput: [],
+    },
     hints: ["개설강좌 진단 숫자를 만들지 못했습니다. 본 기능 결과와 별도로 진단 생성 단계만 확인해야 합니다."],
     error: {
       stage,
@@ -792,7 +801,7 @@ export async function buildAcademicPlanningTimetableResult(args: {
     year: args.year,
     termCode: args.termCode,
     department: args.department,
-  });
+  }, catalog.diagnostics);
   const coverage = officialCoverage(requirementSources, requirementQuery);
   const departmentLabel = departmentDisplayName(args.department, items, requirementSources, personal);
   const standing = studentStandingLabel({
@@ -840,6 +849,27 @@ export async function buildAcademicPlanningTimetableResult(args: {
     completedCourses: personal.completedCourses,
     currentCourses: personal.currentCourses,
     courseCatalogDiagnostics: catalog.diagnostics,
+    payloadDiagnostics: buildCourseCatalogPayloadDiagnostics({
+      producer: "academic-planning.timetable",
+      query: {
+        ...(base.query ?? {}),
+        admissionYear: args.admissionYear,
+        ...(args.studentType ? { studentType: args.studentType } : {}),
+        ...(args.expectedGraduationTerm ? { expectedGraduationTerm: args.expectedGraduationTerm } : {}),
+        ...(args.studentNumberProvided ? { studentNumberProvided: true } : {}),
+      },
+      items,
+      diagnostics: catalog.diagnostics,
+      total: base.total,
+      requirementSourceCount: requirementSources.length,
+      completedCourseCount: personal.completedCourses.length,
+      currentCourseCount: personal.currentCourses.length,
+      choiceGroupCount: choiceGroups.length,
+      dataReadinessCount: dataReadiness.length,
+      hasDataReadiness: true,
+      automaticPlanningApplied: coverage.status === "confirmed",
+      officialCoverageStatus: coverage.status,
+    }),
     dataReadiness,
     officialRequirementCoverage: coverage,
     officialCoverage: coverage,
@@ -908,6 +938,23 @@ export async function buildAcademicPlanningGraduationRoadmapResult(args: {
     graduationSelectedChoiceKeys: selectedChoiceKeys,
     completedCourses: personal.completedCourses,
     currentCourses: personal.currentCourses,
+    payloadDiagnostics: buildCourseCatalogPayloadDiagnostics({
+      producer: "academic-planning.graduation-roadmap",
+      query: {
+        ...(requirementResult.query ?? {}),
+        ...(departmentLabel ? { departmentLabel, displayDepartment: departmentLabel } : {}),
+        ...(standing ? { studentStanding: standing } : {}),
+      },
+      total: requirementSources.length,
+      requirementSourceCount: requirementSources.length,
+      completedCourseCount: personal.completedCourses.length,
+      currentCourseCount: personal.currentCourses.length,
+      choiceGroupCount: choiceGroups.length,
+      dataReadinessCount: dataReadiness.length,
+      hasDataReadiness: true,
+      automaticPlanningApplied: coverage.status === "confirmed",
+      officialCoverageStatus: coverage.status,
+    }),
     dataReadiness,
     officialRequirementCoverage: coverage,
     officialCoverage: coverage,

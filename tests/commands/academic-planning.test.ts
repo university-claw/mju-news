@@ -321,6 +321,19 @@ describe("academic-planning command", () => {
         expect.objectContaining({ target: "course-catalog", status: "ready", count: 2 }),
         expect.objectContaining({ target: "graduation-requirements", status: "ready", count: 1 }),
       ]);
+      expect(result.courseCatalogDiagnostics.samples?.readerOutput).toHaveLength(2);
+      expect(result.payloadDiagnostics).toMatchObject({
+        diagnosticVersion: 2,
+        producer: "academic-planning.timetable",
+        output: {
+          itemCount: 2,
+          requirementSourceCount: 1,
+          completedCourseCount: 1,
+          currentCourseCount: 1,
+          hasCourseCatalogDiagnostics: true,
+          hasDataReadiness: true,
+        },
+      });
       expect(result.officialRequirementCoverage.status).toBe("confirmed");
     });
   });
@@ -390,6 +403,16 @@ describe("academic-planning command", () => {
       expect(result.dataReadiness[0].message).toContain("Verify public-data graduation requirement import");
       expect(result.officialRequirementCoverage).toMatchObject({
         status: "needs-official-check",
+      });
+      expect(result.payloadDiagnostics).toMatchObject({
+        diagnosticVersion: 2,
+        producer: "academic-planning.graduation-roadmap",
+        output: {
+          total: 0,
+          requirementSourceCount: 0,
+          hasCourseCatalogDiagnostics: false,
+          hasDataReadiness: true,
+        },
       });
       expect(result.query.unavailableReason).toContain("공식 졸업요건 데이터");
     });

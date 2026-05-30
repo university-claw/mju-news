@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { closePool, getPool } from "../db/client.js";
-import { listCourseCatalogEntries } from "../db/course-catalog.js";
+import {
+  listCourseCatalogDiagnostics,
+  listCourseCatalogEntries,
+} from "../db/course-catalog.js";
 import {
   courseCatalogDepartmentCandidates,
   courseCatalogDepartmentMatches,
@@ -9,7 +12,9 @@ import {
 import { InputError } from "../errors.js";
 import { printData } from "../output/print.js";
 import type {
+  CourseCatalogPayloadDiagnostics,
   CourseCatalogDiagnosticBucket,
+  CourseCatalogDiagnosticSample,
   CourseCatalogDiagnostics,
   CourseCatalogEntry,
   ListResult,
@@ -22,6 +27,11 @@ export interface CourseCatalogListQuery {
   category?: string;
   department?: string;
 }
+
+export type CourseCatalogListResult = ListResult<CourseCatalogEntry> & {
+  courseCatalogDiagnostics?: CourseCatalogDiagnostics;
+  payloadDiagnostics: CourseCatalogPayloadDiagnostics;
+};
 
 export function parseCatalogYear(input: string): number {
   const year = Number(input);
@@ -78,16 +88,73 @@ export function resolveCatalogJsonPath(
 export function buildCourseCatalogListResult(
   items: CourseCatalogEntry[],
   query: CourseCatalogListQuery,
-): ListResult<CourseCatalogEntry> {
+  diagnostics?: CourseCatalogDiagnostics,
+): CourseCatalogListResult {
+  const resultQuery = {
+    year: query.year,
+    termCode: query.termCode,
+    ...(query.category ? { category: query.category } : {}),
+    ...(query.department ? { department: query.department } : {}),
+  };
   return {
     total: items.length,
     items,
-    query: {
-      year: query.year,
-      termCode: query.termCode,
-      ...(query.category ? { category: query.category } : {}),
-      ...(query.department ? { department: query.department } : {}),
+    query: resultQuery,
+    ...(diagnostics ? { courseCatalogDiagnostics: diagnostics } : {}),
+    payloadDiagnostics: buildCourseCatalogPayloadDiagnostics({
+      producer: "course-catalog.list",
+      query: resultQuery,
+      items,
+      diagnostics,
+    }),
+  };
+}
+
+export function buildCourseCatalogPayloadDiagnostics(args: {
+  producer: CourseCatalogPayloadDiagnostics["producer"];
+  query: Record<string, unknown>;
+  items?: CourseCatalogEntry[];
+  diagnostics?: CourseCatalogDiagnostics;
+  total?: number;
+  requirementSourceCount?: number;
+  completedCourseCount?: number;
+  currentCourseCount?: number;
+  choiceGroupCount?: number;
+  dataReadinessCount?: number;
+  hasDataReadiness?: boolean;
+  automaticPlanningApplied?: boolean;
+  officialCoverageStatus?: string;
+  hints?: string[];
+}): CourseCatalogPayloadDiagnostics {
+  const itemCount = args.items?.length ?? args.total;
+  const hints = [...(args.hints ?? [])];
+  if (!args.diagnostics && args.producer !== "academic-planning.graduation-roadmap") {
+    hints.push("courseCatalogDiagnostics is missing from this payload producer.");
+  }
+  return {
+    diagnosticVersion: 2,
+    generatedAt: new Date().toISOString(),
+    producer: args.producer,
+    query: args.query,
+    output: {
+      ...(typeof args.total === "number" ? { total: args.total } : {}),
+      ...(typeof itemCount === "number" ? { itemCount } : {}),
+      ...(typeof args.requirementSourceCount === "number" ? { requirementSourceCount: args.requirementSourceCount } : {}),
+      ...(typeof args.completedCourseCount === "number" ? { completedCourseCount: args.completedCourseCount } : {}),
+      ...(typeof args.currentCourseCount === "number" ? { currentCourseCount: args.currentCourseCount } : {}),
+      ...(typeof args.choiceGroupCount === "number" ? { choiceGroupCount: args.choiceGroupCount } : {}),
+      ...(typeof args.dataReadinessCount === "number" ? { dataReadinessCount: args.dataReadinessCount } : {}),
+      hasCourseCatalogDiagnostics: Boolean(args.diagnostics),
+      ...(typeof args.hasDataReadiness === "boolean" ? { hasDataReadiness: args.hasDataReadiness } : {}),
+      ...(typeof args.automaticPlanningApplied === "boolean" ? { automaticPlanningApplied: args.automaticPlanningApplied } : {}),
+      ...(args.officialCoverageStatus ? { officialCoverageStatus: args.officialCoverageStatus } : {}),
     },
+    source: {
+      ...(args.diagnostics ? { courseCatalog: args.diagnostics.source } : {}),
+      ...(args.diagnostics ? { courseCatalogScope: args.diagnostics.scope } : {}),
+      ...(args.diagnostics ? { courseCatalogStageCount: args.diagnostics.stages.length } : {}),
+    },
+    hints,
   };
 }
 
@@ -155,6 +222,11 @@ export function buildCourseCatalogDiagnosticsFromExport(
       departmentMatched: diagnosticBucketsFromEntries(departmentMatched, "department", 12),
       readerOutput: diagnosticBucketsFromEntries(outputItems, "department", 12),
     },
+    samples: {
+      allTerm: diagnosticSamplesFromEntries(allTerm),
+      departmentMatched: diagnosticSamplesFromEntries(departmentMatched),
+      readerOutput: diagnosticSamplesFromEntries(outputItems),
+    },
     hints: courseCatalogDiagnosticHints({
       allTermCount: allTerm.length,
       departmentMatchedCount: departmentMatched.length,
@@ -193,6 +265,22 @@ function diagnosticBucketsFromEntries(
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"))
     .slice(0, limit)
     .map(([key, count]) => ({ key, count }));
+}
+
+function diagnosticSamplesFromEntries(
+  entries: CourseCatalogEntry[],
+  limit = 8,
+): CourseCatalogDiagnosticSample[] {
+  return entries.slice(0, limit).map((entry) => ({
+    courseTitle: entry.courseTitle,
+    ...(entry.courseCode ? { courseCode: entry.courseCode } : {}),
+    ...(entry.category ? { category: entry.category } : {}),
+    ...(entry.categoryLabel ? { categoryLabel: entry.categoryLabel } : {}),
+    ...(entry.department ? { department: entry.department } : {}),
+    ...(entry.gradeLevel ? { gradeLevel: entry.gradeLevel } : {}),
+    ...(entry.section ? { section: entry.section } : {}),
+    ...(entry.professor ? { professor: entry.professor } : {}),
+  }));
 }
 
 function diagnosticStage(
@@ -369,15 +457,18 @@ function buildList(): Command {
       };
 
       if (catalogJson) {
-        const items = listCourseCatalogEntriesFromExport(await readJson(catalogJson), query);
-        printData(buildCourseCatalogListResult(items, query), g.format, "course-catalog");
+        const catalog = await readJson(catalogJson);
+        const items = listCourseCatalogEntriesFromExport(catalog, query);
+        const diagnostics = buildCourseCatalogDiagnosticsFromExport(catalog, query, items);
+        printData(buildCourseCatalogListResult(items, query, diagnostics), g.format, "course-catalog");
         return;
       }
 
       const pool = getPool();
       try {
         const items = await listCourseCatalogEntries(pool, query);
-        const result = buildCourseCatalogListResult(items, query);
+        const diagnostics = await listCourseCatalogDiagnostics(pool, query, items);
+        const result = buildCourseCatalogListResult(items, query, diagnostics);
         printData(result, g.format, "course-catalog");
       } finally {
         await closePool();
