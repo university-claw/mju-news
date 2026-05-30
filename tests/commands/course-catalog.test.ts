@@ -124,6 +124,58 @@ describe("course-catalog command validation", () => {
     });
   });
 
+  it("matches full MSI department labels against catalog code, parent, suffix, and shared liberal buckets", () => {
+    const items = listCourseCatalogEntriesFromExport([
+      {
+        year: 2026,
+        termCode: "10",
+        entries: [
+          {
+            courseTitle: "Suffix major",
+            category: "major",
+            department: "컴퓨터공학전공",
+            meetings: [],
+          },
+          {
+            courseTitle: "Parent major",
+            category: "major",
+            department: "15611 컴퓨터정보통신공학부",
+            meetings: [],
+          },
+          {
+            courseTitle: "Code major",
+            category: "major",
+            department: "15611",
+            meetings: [],
+          },
+          {
+            courseTitle: "Other major",
+            category: "major",
+            department: "15612 컴퓨터정보통신공학부 정보통신공학전공",
+            meetings: [],
+          },
+          {
+            courseTitle: "Shared liberal",
+            category: "elective",
+            department: "10000 자연캠퍼스 교양",
+            meetings: [],
+          },
+        ],
+      },
+    ], {
+      year: 2026,
+      termCode: "10",
+      department: "15611 컴퓨터정보통신공학부 컴퓨터공학전공",
+    });
+
+    expect(new Set(items.map((item) => item.courseTitle))).toEqual(new Set([
+      "Code major",
+      "Parent major",
+      "Shared liberal",
+      "Suffix major",
+    ]));
+  });
+
   it("attaches the course-catalog group to the root command", () => {
     const root = buildRootCommand();
     expect(root.commands.map((command) => command.name())).toContain(
