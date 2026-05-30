@@ -185,6 +185,51 @@ describe("course-catalog command validation", () => {
     ]));
   });
 
+  it("matches code-less MSI department labels against parent and suffix catalog buckets", () => {
+    const items = listCourseCatalogEntriesFromExport([
+      {
+        year: 2026,
+        termCode: "10",
+        entries: [
+          {
+            courseTitle: "Parent major",
+            category: "major",
+            department: "15611 컴퓨터정보통신공학부",
+            meetings: [],
+          },
+          {
+            courseTitle: "Suffix major",
+            category: "major",
+            department: "컴퓨터공학전공",
+            meetings: [],
+          },
+          {
+            courseTitle: "Other major",
+            category: "major",
+            department: "15612 컴퓨터정보통신공학부 정보통신공학전공",
+            meetings: [],
+          },
+          {
+            courseTitle: "Shared liberal",
+            category: "elective",
+            department: "10000 자연캠퍼스 교양",
+            meetings: [],
+          },
+        ],
+      },
+    ], {
+      year: 2026,
+      termCode: "10",
+      department: "컴퓨터정보통신공학부 컴퓨터공학전공",
+    });
+
+    expect(new Set(items.map((item) => item.courseTitle))).toEqual(new Set([
+      "Parent major",
+      "Shared liberal",
+      "Suffix major",
+    ]));
+  });
+
   it("builds export diagnostics for catalog filtering stages", () => {
     const snapshot = [
       {
