@@ -136,6 +136,41 @@ describe("listCourseCatalogEntries", () => {
     expect(observed.sql).toContain("e.department ~ '^[0-9]{5} .+교양$'");
   });
 
+  it("expands full MSI department labels into code, parent, and suffix filters", async () => {
+    const observed: { sql?: string; params?: unknown[] } = {};
+    const pool = {
+      query: async (sql: string, params: unknown[]) => {
+        observed.sql = sql;
+        observed.params = params;
+        return {
+          rows: [],
+          rowCount: 0,
+          command: "SELECT",
+          oid: 0,
+          fields: [],
+        };
+      },
+    };
+
+    const items = await listCourseCatalogEntries(pool as never, {
+      year: 2026,
+      termCode: "10",
+      department: "15611 컴퓨터정보통신공학부 컴퓨터공학전공",
+    });
+
+    expect(items).toEqual([]);
+    expect(observed.params).toEqual([
+      2026,
+      "10",
+      "15611 컴퓨터정보통신공학부 컴퓨터공학전공",
+      "15611",
+      "컴퓨터정보통신공학부 컴퓨터공학전공",
+      "컴퓨터공학전공",
+    ]);
+    expect(observed.sql).toContain("$3 LIKE e.department || ' %'");
+    expect(observed.sql).toContain("e.department LIKE '% ' || $6");
+  });
+
   it("deduplicates repeated snapshots while preferring classified entries", async () => {
     const observed: { sql?: string; params?: unknown[] } = {};
     const pool = {

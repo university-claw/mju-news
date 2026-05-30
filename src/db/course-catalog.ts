@@ -4,6 +4,7 @@ import type {
   CourseCatalogMeeting,
   CourseCatalogMeetingParseStatus,
 } from "../types.js";
+import { courseCatalogDepartmentCandidates } from "../course-catalog-department.js";
 
 export interface ListCourseCatalogOpts {
   year: number;
@@ -90,8 +91,17 @@ export async function listCourseCatalogEntries(
     where.push(`e.category = $${params.length}`);
   }
   if (opts.department) {
-    params.push(opts.department);
-    where.push(`(e.department = $${params.length} OR e.department LIKE $${params.length} || ' %' OR e.department ~ '^[0-9]{5} .+교양$')`);
+    const filters = courseCatalogDepartmentCandidates(opts.department).map((candidate) => {
+      params.push(candidate);
+      const index = params.length;
+      return [
+        `e.department = $${index}`,
+        `e.department LIKE $${index} || ' %'`,
+        `$${index} LIKE e.department || ' %'`,
+        `e.department LIKE '% ' || $${index}`,
+      ].join(" OR ");
+    });
+    where.push(`(${filters.map((filter) => `(${filter})`).join(" OR ")} OR e.department ~ '^[0-9]{5} .+교양$')`);
   }
 
   const res = await pool.query(

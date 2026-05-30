@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { closePool, getPool } from "../db/client.js";
 import { listCourseCatalogEntries } from "../db/course-catalog.js";
+import { courseCatalogDepartmentMatches } from "../course-catalog-department.js";
 import { InputError } from "../errors.js";
 import { printData } from "../output/print.js";
 import type { CourseCatalogEntry, ListResult } from "../types.js";
@@ -154,12 +155,6 @@ function courseCatalogMeetingsFromExport(value: unknown): CourseCatalogEntry["me
 
 function courseCatalogParseStatus(value: unknown): CourseCatalogEntry["meetings"][number]["parseStatus"] {
   return value === "parsed" || value === "partial" || value === "unparsed" ? value : "unparsed";
-}
-
-function courseCatalogDepartmentMatches(department: string | null, queryDepartment: string): boolean {
-  return department === queryDepartment ||
-    Boolean(department?.startsWith(`${queryDepartment} `)) ||
-    Boolean(department && /^\d{5}\s.+교양$/u.test(department));
 }
 
 function courseCatalogDedupKey(entry: CourseCatalogEntry): string {
