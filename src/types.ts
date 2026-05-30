@@ -108,6 +108,47 @@ export interface CourseCatalogEntry {
   meetings: CourseCatalogMeeting[];
 }
 
+export interface CourseCatalogDiagnosticBucket {
+  key: string;
+  count: number;
+}
+
+export interface CourseCatalogDiagnosticStage {
+  key: string;
+  label: string;
+  count: number;
+  status: "ok" | "empty" | "error";
+  message?: string;
+}
+
+export interface CourseCatalogDiagnostics {
+  generatedAt: string;
+  scope: {
+    year: number;
+    termCode: string;
+    category?: string;
+    department?: string;
+  };
+  source: "database" | "export" | "fallback";
+  departmentCandidates: string[];
+  stages: CourseCatalogDiagnosticStage[];
+  categoryCounts: {
+    allTerm: CourseCatalogDiagnosticBucket[];
+    departmentMatched: CourseCatalogDiagnosticBucket[];
+    readerOutput: CourseCatalogDiagnosticBucket[];
+  };
+  departmentCounts: {
+    allTerm: CourseCatalogDiagnosticBucket[];
+    departmentMatched: CourseCatalogDiagnosticBucket[];
+    readerOutput: CourseCatalogDiagnosticBucket[];
+  };
+  hints: string[];
+  error?: {
+    stage: string;
+    message: string;
+  };
+}
+
 export type GraduationRequirementRuleStatus = "confirmed" | "unprovided";
 
 export interface GraduationRequirementCourseGroup {

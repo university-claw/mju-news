@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCourseCatalogDiagnosticsFromExport,
   buildCourseCatalogListResult,
   listCourseCatalogEntriesFromExport,
   parseCatalogYear,
@@ -174,6 +175,54 @@ describe("course-catalog command validation", () => {
       "Shared liberal",
       "Suffix major",
     ]));
+  });
+
+  it("builds export diagnostics for catalog filtering stages", () => {
+    const snapshot = [
+      {
+        year: 2026,
+        termCode: "10",
+        entries: [
+          {
+            courseTitle: "Major Course",
+            category: "major",
+            department: "15611 Computer Engineering",
+            meetings: [],
+          },
+          {
+            courseTitle: "Other Department",
+            category: "major",
+            department: "15612 Information Engineering",
+            meetings: [],
+          },
+          {
+            courseTitle: "Unknown Course",
+            category: "unknown",
+            department: "15611 Computer Engineering",
+            meetings: [],
+          },
+        ],
+      },
+    ];
+    const query = {
+      year: 2026,
+      termCode: "10",
+      department: "15611",
+    };
+    const items = listCourseCatalogEntriesFromExport(snapshot, query);
+    const diagnostics = buildCourseCatalogDiagnosticsFromExport(snapshot, query, items);
+
+    expect(diagnostics.source).toBe("export");
+    expect(diagnostics.stages.map((stage) => [stage.key, stage.count])).toEqual([
+      ["export.term.all", 3],
+      ["export.term.departmentMatched", 2],
+      ["reader.output", 2],
+    ]);
+    expect(diagnostics.categoryCounts.readerOutput).toEqual([
+      { key: "major", count: 1 },
+      { key: "unknown", count: 1 },
+    ]);
+    expect(diagnostics.departmentCandidates).toEqual(["15611"]);
   });
 
   it("attaches the course-catalog group to the root command", () => {
