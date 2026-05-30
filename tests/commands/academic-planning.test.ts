@@ -224,6 +224,42 @@ describe("academic-planning command", () => {
     ]);
   });
 
+  it("normalizes MSI year-separated term rows and allRows fallback", () => {
+    expect(normalizeCompletedCoursesFromMsi({
+      termRecords: [
+        {
+          year: 2025,
+          termLabel: "1\uD559\uAE30",
+          courses: [
+            { courseTitle: "Discrete Mathematics", courseCode: "KME02108", credits: 3 },
+          ],
+        },
+      ],
+      allRows: [
+        {
+          year: 2024,
+          termLabel: "2\uD559\uAE30",
+          courseTitle: "Linear Algebra",
+          courseCode: "KME02107",
+          credits: 3,
+        },
+      ],
+    })).toEqual([
+      {
+        courseTitle: "Discrete Mathematics",
+        courseCode: "KME02108",
+        credits: 3,
+        termLabel: "2025 1\uD559\uAE30",
+      },
+      {
+        courseTitle: "Linear Algebra",
+        courseCode: "KME02107",
+        credits: 3,
+        termLabel: "2024 2\uD559\uAE30",
+      },
+    ]);
+  });
+
   it("builds a timetable planning payload from fixture catalog and requirement seeds", async () => {
     await withTempDir(async (dir) => {
       const catalogJson = join(dir, "catalog.json");
@@ -281,6 +317,10 @@ describe("academic-planning command", () => {
       expect(result.studentStanding).toBe("3학년 1학기");
       expect(result.completedCourses[0]).toMatchObject({ courseTitle: "자료구조" });
       expect(result.currentCourses[0]).toMatchObject({ courseTitle: "Capstone Design" });
+      expect(result.dataReadiness).toEqual([
+        expect.objectContaining({ target: "course-catalog", status: "ready", count: 2 }),
+        expect.objectContaining({ target: "graduation-requirements", status: "ready", count: 1 }),
+      ]);
       expect(result.officialRequirementCoverage.status).toBe("confirmed");
     });
   });
@@ -288,6 +328,7 @@ describe("academic-planning command", () => {
   it("preselects requirement choices from completed course evidence", async () => {
     await withTempDir(async (dir) => {
       const englishBasicTitles = officialSources[0].rules[0].courseGroups[0].requiredCourseTitles;
+      const spacedEnglishTitle = englishBasicTitles[0]?.replace(/(\d)$/u, " $1") ?? englishBasicTitles[0];
       const catalogJson = join(dir, "catalog.json");
       const requirementsDir = join(dir, "requirements");
       const completedJson = join(dir, "grade-history.json");
@@ -307,7 +348,7 @@ describe("academic-planning command", () => {
       await writeFile(join(requirementsDir, "common.json"), JSON.stringify(officialSources[0]), "utf8");
       await writeFile(completedJson, JSON.stringify({
         completedCourses: [
-          { courseTitle: englishBasicTitles[0], courseCode: "ENG101" },
+          { courseTitle: spacedEnglishTitle, courseCode: "ENG101" },
           { courseTitle: englishBasicTitles[1], courseCode: "ENG102" },
         ],
       }), "utf8");
@@ -343,6 +384,10 @@ describe("academic-planning command", () => {
 
       expect(result.items).toEqual([]);
       expect(result.choiceGroups).toEqual([]);
+      expect(result.dataReadiness).toEqual([
+        expect.objectContaining({ target: "graduation-requirements", status: "empty", count: 0 }),
+      ]);
+      expect(result.dataReadiness[0].message).toContain("Verify public-data graduation requirement import");
       expect(result.officialRequirementCoverage).toMatchObject({
         status: "needs-official-check",
       });
