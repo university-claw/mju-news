@@ -165,10 +165,45 @@ describe("listCourseCatalogEntries", () => {
       "15611 컴퓨터정보통신공학부 컴퓨터공학전공",
       "15611",
       "컴퓨터정보통신공학부 컴퓨터공학전공",
+      "컴퓨터정보통신공학부",
       "컴퓨터공학전공",
     ]);
     expect(observed.sql).toContain("$3 LIKE e.department || ' %'");
-    expect(observed.sql).toContain("e.department LIKE '% ' || $6");
+    expect(observed.sql).toContain("e.department LIKE '% ' || $7");
+  });
+
+  it("adds a parent department filter when MSI omits the catalog code", async () => {
+    const observed: { sql?: string; params?: unknown[] } = {};
+    const pool = {
+      query: async (sql: string, params: unknown[]) => {
+        observed.sql = sql;
+        observed.params = params;
+        return {
+          rows: [],
+          rowCount: 0,
+          command: "SELECT",
+          oid: 0,
+          fields: [],
+        };
+      },
+    };
+
+    const items = await listCourseCatalogEntries(pool as never, {
+      year: 2026,
+      termCode: "10",
+      department: "컴퓨터정보통신공학부 컴퓨터공학전공",
+    });
+
+    expect(items).toEqual([]);
+    expect(observed.params).toEqual([
+      2026,
+      "10",
+      "컴퓨터정보통신공학부 컴퓨터공학전공",
+      "컴퓨터정보통신공학부",
+      "컴퓨터공학전공",
+    ]);
+    expect(observed.sql).toContain("e.department LIKE '% ' || $4");
+    expect(observed.sql).toContain("e.department LIKE '% ' || $5");
   });
 
   it("deduplicates repeated snapshots while preferring classified entries", async () => {
