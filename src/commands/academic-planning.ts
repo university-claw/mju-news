@@ -1,10 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { closePool, getPool } from "../db/client.js";
-import { listCourseCatalogEntries } from "../db/course-catalog.js";
+import {
+  listCourseCatalogDiagnostics,
+  listCourseCatalogEntries,
+} from "../db/course-catalog.js";
 import { listGraduationRequirementSources } from "../db/graduation-requirements.js";
 import { printData } from "../output/print.js";
 import type {
+  CourseCatalogDiagnostics,
   CourseCatalogEntry,
   GraduationRequirementCourseGroup,
   GraduationRequirementSource,
@@ -12,6 +16,7 @@ import type {
 } from "../types.js";
 import { readGlobalOptions } from "./common.js";
 import {
+  buildCourseCatalogDiagnosticsFromExport,
   buildCourseCatalogListResult,
   listCourseCatalogEntriesFromExport,
   parseCatalogYear,
@@ -85,6 +90,7 @@ export type AcademicTimetablePlanningResult = ListResult<CourseCatalogEntry> & {
   timetableSelectedChoiceKeys: AcademicRequirementChoiceSelections;
   completedCourses: AcademicCompletedCourse[];
   currentCourses: AcademicCompletedCourse[];
+  courseCatalogDiagnostics: CourseCatalogDiagnostics;
   dataReadiness: AcademicPlanningDataReadiness[];
   officialRequirementCoverage: AcademicOfficialCoverage;
   officialCoverage: AcademicOfficialCoverage;
@@ -597,24 +603,92 @@ async function loadRequirementSources(
   }
 }
 
-async function loadCourseCatalogEntries(args: {
+function courseCatalogDiagnosticsFallback(
+  args: {
+    year: number;
+    termCode: string;
+    department: string;
+  },
+  stage: string,
+  error: unknown,
+): CourseCatalogDiagnostics {
+  const message = error instanceof Error ? error.message : stringValue(error);
+  return {
+    generatedAt: new Date().toISOString(),
+    source: "fallback",
+    scope: {
+      year: args.year,
+      termCode: args.termCode,
+      department: args.department,
+    },
+    departmentCandidates: [],
+    stages: [
+      {
+        key: stage,
+        label: "진단 생성 실패",
+        count: 0,
+        status: "error",
+        message: message || "unknown diagnostic error",
+      },
+    ],
+    categoryCounts: {
+      allTerm: [],
+      departmentMatched: [],
+      readerOutput: [],
+    },
+    departmentCounts: {
+      allTerm: [],
+      departmentMatched: [],
+      readerOutput: [],
+    },
+    hints: ["개설강좌 진단 숫자를 만들지 못했습니다. 본 기능 결과와 별도로 진단 생성 단계만 확인해야 합니다."],
+    error: {
+      stage,
+      message: message || "unknown diagnostic error",
+    },
+  };
+}
+
+async function loadCourseCatalogBundle(args: {
   year: number;
   termCode: string;
   department: string;
   catalogJson?: string;
-}): Promise<CourseCatalogEntry[]> {
+}): Promise<{
+  items: CourseCatalogEntry[];
+  diagnostics: CourseCatalogDiagnostics;
+}> {
   const query = {
     year: args.year,
     termCode: args.termCode,
     department: args.department,
   };
   if (args.catalogJson) {
-    return listCourseCatalogEntriesFromExport(await readJson(args.catalogJson), query);
+    const catalog = await readJson(args.catalogJson);
+    const items = listCourseCatalogEntriesFromExport(catalog, query);
+    try {
+      return {
+        items,
+        diagnostics: buildCourseCatalogDiagnosticsFromExport(catalog, query, items),
+      };
+    } catch (error) {
+      return {
+        items,
+        diagnostics: courseCatalogDiagnosticsFallback(args, "catalog-json.diagnostics", error),
+      };
+    }
   }
 
   const pool = getPool();
   try {
-    return await listCourseCatalogEntries(pool, query);
+    const items = await listCourseCatalogEntries(pool, query);
+    let diagnostics: CourseCatalogDiagnostics;
+    try {
+      diagnostics = await listCourseCatalogDiagnostics(pool, query, items);
+    } catch (error) {
+      diagnostics = courseCatalogDiagnosticsFallback(args, "db.diagnostics", error);
+    }
+    return { items, diagnostics };
   } catch (error) {
     throw academicPlanningDbError("course-catalog", error);
   } finally {
@@ -708,11 +782,12 @@ export async function buildAcademicPlanningTimetableResult(args: {
     ...(args.studentType ? { studentType: args.studentType } : {}),
     ...(args.expectedGraduationTerm ? { expectedGraduationTerm: args.expectedGraduationTerm } : {}),
   };
-  const [items, requirementSources, personal] = await Promise.all([
-    loadCourseCatalogEntries(args),
+  const [catalog, requirementSources, personal] = await Promise.all([
+    loadCourseCatalogBundle(args),
     loadRequirementSources(requirementQuery, args.requirementsDir),
     loadPersonalInputs(args),
   ]);
+  const { items } = catalog;
   const base = buildCourseCatalogListResult(items, {
     year: args.year,
     termCode: args.termCode,
@@ -764,6 +839,7 @@ export async function buildAcademicPlanningTimetableResult(args: {
     timetableSelectedChoiceKeys: selectedChoiceKeys,
     completedCourses: personal.completedCourses,
     currentCourses: personal.currentCourses,
+    courseCatalogDiagnostics: catalog.diagnostics,
     dataReadiness,
     officialRequirementCoverage: coverage,
     officialCoverage: coverage,

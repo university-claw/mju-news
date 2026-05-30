@@ -2,10 +2,18 @@ import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { closePool, getPool } from "../db/client.js";
 import { listCourseCatalogEntries } from "../db/course-catalog.js";
-import { courseCatalogDepartmentMatches } from "../course-catalog-department.js";
+import {
+  courseCatalogDepartmentCandidates,
+  courseCatalogDepartmentMatches,
+} from "../course-catalog-department.js";
 import { InputError } from "../errors.js";
 import { printData } from "../output/print.js";
-import type { CourseCatalogEntry, ListResult } from "../types.js";
+import type {
+  CourseCatalogDiagnosticBucket,
+  CourseCatalogDiagnostics,
+  CourseCatalogEntry,
+  ListResult,
+} from "../types.js";
 import { readGlobalOptions } from "./common.js";
 
 export interface CourseCatalogListQuery {
@@ -106,6 +114,128 @@ export function listCourseCatalogEntriesFromExport(
     }
   }
   return [...byKey.values()].sort(compareCourseCatalogEntries);
+}
+
+export function buildCourseCatalogDiagnosticsFromExport(
+  courseCatalog: unknown,
+  query: CourseCatalogListQuery,
+  outputItems: CourseCatalogEntry[],
+): CourseCatalogDiagnostics {
+  const entries = courseCatalogEntriesFromExport(courseCatalog);
+  const allTerm = entries.filter((entry) => (
+    entry.year === query.year &&
+    entry.termCode === query.termCode &&
+    (!query.category || entry.category === query.category)
+  ));
+  const departmentMatched = query.department
+    ? allTerm.filter((entry) => courseCatalogDepartmentMatches(entry.department, query.department!))
+    : allTerm;
+  return {
+    generatedAt: new Date().toISOString(),
+    source: "export",
+    scope: {
+      year: query.year,
+      termCode: query.termCode,
+      ...(query.category ? { category: query.category } : {}),
+      ...(query.department ? { department: query.department } : {}),
+    },
+    departmentCandidates: query.department ? courseCatalogDepartmentCandidates(query.department) : [],
+    stages: [
+      diagnosticStage("export.term.all", "JSON 연도/학기 전체", allTerm.length, "해당 연도/학기 원자료가 JSON에 없습니다."),
+      diagnosticStage("export.term.departmentMatched", "JSON 학과 필터 후", departmentMatched.length, "학과 필터 후 남는 JSON 원자료가 없습니다."),
+      diagnosticStage("reader.output", "reader 출력", outputItems.length, "reader가 웹뷰로 넘길 강의가 없습니다."),
+    ],
+    categoryCounts: {
+      allTerm: diagnosticBucketsFromEntries(allTerm, "category", 20),
+      departmentMatched: diagnosticBucketsFromEntries(departmentMatched, "category", 20),
+      readerOutput: diagnosticBucketsFromEntries(outputItems, "category", 20),
+    },
+    departmentCounts: {
+      allTerm: diagnosticBucketsFromEntries(allTerm, "department", 12),
+      departmentMatched: diagnosticBucketsFromEntries(departmentMatched, "department", 12),
+      readerOutput: diagnosticBucketsFromEntries(outputItems, "department", 12),
+    },
+    hints: courseCatalogDiagnosticHints({
+      allTermCount: allTerm.length,
+      departmentMatchedCount: departmentMatched.length,
+      readerOutputCount: outputItems.length,
+      outputItems,
+    }),
+  };
+}
+
+function courseCatalogEntriesFromExport(courseCatalog: unknown): CourseCatalogEntry[] {
+  const snapshots = Array.isArray(courseCatalog) ? courseCatalog : [courseCatalog];
+  const entries: CourseCatalogEntry[] = [];
+  for (const snapshot of snapshots) {
+    const snapshotRecord = recordFrom(snapshot);
+    const rawEntries = Array.isArray(snapshotRecord.entries) ? snapshotRecord.entries : [];
+    for (const rawEntry of rawEntries) {
+      const entry = courseCatalogEntryFromExport(rawEntry, snapshotRecord);
+      if (entry) entries.push(entry);
+    }
+  }
+  return entries;
+}
+
+function diagnosticBucketsFromEntries(
+  entries: CourseCatalogEntry[],
+  field: "category" | "department",
+  limit: number,
+): CourseCatalogDiagnosticBucket[] {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    const raw = field === "category" ? entry.category : entry.department;
+    const key = raw?.trim() || "(empty)";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"))
+    .slice(0, limit)
+    .map(([key, count]) => ({ key, count }));
+}
+
+function diagnosticStage(
+  key: string,
+  label: string,
+  count: number,
+  emptyMessage: string,
+) {
+  return {
+    key,
+    label,
+    count,
+    status: count > 0 ? "ok" as const : "empty" as const,
+    ...(count > 0 ? {} : { message: emptyMessage }),
+  };
+}
+
+function courseCatalogDiagnosticHints(args: {
+  allTermCount: number;
+  departmentMatchedCount: number;
+  readerOutputCount: number;
+  outputItems: CourseCatalogEntry[];
+}): string[] {
+  const hints: string[] = [];
+  if (args.allTermCount === 0) {
+    hints.push("해당 연도/학기 원자료가 없습니다. 개설강좌 수집/임포트 여부를 먼저 확인해야 합니다.");
+    return hints;
+  }
+  if (args.departmentMatchedCount === 0) {
+    hints.push("원자료는 있지만 학과 필터 후 0건입니다. 학과 코드/학과명 매칭 규칙을 확인해야 합니다.");
+    return hints;
+  }
+  if (args.readerOutputCount === 0) {
+    hints.push("학과 필터 raw row는 있지만 reader 출력이 0건입니다. 중복 제거나 출력 변환 단계를 확인해야 합니다.");
+    return hints;
+  }
+  if (!args.outputItems.some((item) => item.category === "major")) {
+    hints.push("reader 출력에 전공 category가 없습니다. 수집 분류값(category/category_label) 또는 전공 분류 규칙을 확인해야 합니다.");
+  }
+  if (!args.outputItems.some((item) => item.category !== "major")) {
+    hints.push("reader 출력에 교양/선택 category가 없습니다. 공통 교양 학과 공유 필터와 분류 규칙을 확인해야 합니다.");
+  }
+  return hints;
 }
 
 function courseCatalogEntryFromExport(
